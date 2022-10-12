@@ -95,8 +95,8 @@ def adapt_to_target(ckpt_path):
     assert args.target is not None
     target_dataset, target_domain = get_target_dataset(args)
     num_classes = len(target_dataset.classes)
-    adapt_loader = DataLoader(target_dataset,batch_size=args.batch_size,shuffle=True)
-    test_loader = DataLoader(target_dataset,batch_size=args.batch_size,shuffle=False)
+    adapt_loader = DataLoader(target_dataset,batch_size=args.batch_size,shuffle=True,num_workers=4)
+    test_loader = DataLoader(target_dataset,batch_size=args.batch_size,shuffle=False,num_workers=4)
     
     # load model
     model = ERM(num_classes).cuda()
@@ -178,26 +178,45 @@ def adapt_to_target(ckpt_path):
     
     return result['test_acc']
 
-if __name__ == '__main__':    
+if __name__ == '__main__':
+    source_type = 'single'
+    
     if args.ckpt is not None:
         adapt_to_target(args.ckpt)
-    else:
+    elif source_type == 'single':
+        # Dataset, adapt method should be passed
         num_domain = 4 if args.dataset in ['PACS','office_home'] else 6
-        source_type = 'single'
-        dir_name = {'single':'source','multi':'target'}
         target_acc = {}
         if args.target is not None:
             targets = [args.target]
         else:
-            targets = [0,1,2,3]
+            targets = list(range(num_domain))
         for target in targets:
             for domain in range(num_domain):
-                if source_type == 'single' and domain == target:
+                if domain == target:
                     continue
-                path = f"./ckpts/{args.dataset}_{source_type}_source/{dir_name[source_type]}_{domain}"
+                path = f"./ckpts/{args.dataset}_{source_type}_source/source_{domain}"
                 path = os.path.join(path,os.listdir(path)[0],'ckpt.pth')
-                print(f"{args.dataset} {source_type} source @ domain {domain} adapt to {target}")
+                print(f"{args.dataset} {source_type} source @ domain {domain} -> {target}")
+                args.target = target
                 test_acc = adapt_to_target(path)
                 target_acc[f'source{domain}@target{target}'] = test_acc
-        
+        print(target_acc)
+    
+    elif source_type == 'multi':
+        num_domain = 4 if args.dataset in ['PACS','office_home'] else 6
+        target_acc = {}
+        if args.target is not None:
+            targets = [args.target]
+        else:
+            targets = list(range(num_domain))
+        for target in targets:
+            path = f"./ckpts/{args.dataset}_multi_source/target_{target}"
+            path = os.path.join(path,os.listdir(path)[0],'ckpt.pth')
+            source_domains = list(range(num_domain))
+            source_domains.remove(target)
+            print(f"{args.dataset} {source_type} source @ domain {source_domains} -> {target}")
+            args.target = target
+            test_acc = adapt_to_target(path)
+            target_acc[f'source{source_domains}@target{target}'] = test_acc
         print(target_acc)
