@@ -216,24 +216,26 @@ if __name__ == '__main__':
             targets = [args.target]
         else:
             targets = list(range(num_domain))
+        
+        path = None
         for target in targets:
-            if source_type == 'multi':
+            if source_type == 'multi' or args.dataset == 'Imagenet-C':
                 args.target = target
-                path = f"/nas/datahub/SFDA/ckpts/{args.dataset}_{source_type}_source/{dir_name[source_type]}_{target}"
-                path = os.path.join(path,os.listdir(path)[0],'ckpt.pth')
-                print(f"{args.dataset} {source_type} source @ domain {target} adapt to {target}")
+                if args.dataset != 'Imagenet-C':
+                    path = f"/nas/datahub/SFDA/ckpts/{args.dataset}_{source_type}_source/{dir_name[source_type]}_{target}"
+                    path = os.path.join(path,os.listdir(path)[0],'ckpt.pth')
+                    print(f"{args.dataset} {source_type} source @ domain {target} adapt to {target}")
                 test_acc = adapt_to_target(path)
                 target_acc[f'source{target}@target{target}'] = test_acc
             else:
                 for domain in range(num_domain):
                     if domain == target:
                         continue
-                    args.target = target
                     if args.dataset != 'Imagenet-C':
+                        args.target = target
                         path = f"/nas/datahub/SFDA/ckpts/{args.dataset}_{source_type}_source/{dir_name[source_type]}_{domain}"
                         path = os.path.join(path,os.listdir(path)[0],'ckpt.pth')
                         print(f"{args.dataset} {source_type} source @ domain {domain} adapt to {target}")
-                    else: path = None
                     test_acc = adapt_to_target(path)
                     target_acc[f'source{domain}@target{target}'] = test_acc
         print(target_acc)
