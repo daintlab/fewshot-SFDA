@@ -3,7 +3,9 @@ import torch
 import torchvision.transforms as transforms
 from torchvision.datasets import ImageFolder
 from sklearn.model_selection import train_test_split
+from PIL import ImageFile
 
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 class SourceDomainImageFolder:
     '''
     Modified https://github.com/facebookresearch/DomainBed/blob/main/domainbed/datasets.py
@@ -50,7 +52,7 @@ def get_dataset(args):
     '''   
     data_path = os.path.join(args.data_dir,args.dataset)
     domains = sorted([f.name for f in os.scandir(data_path) if f.is_dir()])
-    
+
     tgt_domain = domains[args.target]
     src_domains = [d for d in domains if d != tgt_domain] if args.source is None else [domains[args.source]]
     
@@ -86,17 +88,38 @@ def get_dataset(args):
 
     
 def get_target_dataset(args):
-    data_path = os.path.join(args.data_dir,args.dataset)
-    domains = sorted([f.name for f in os.scandir(data_path) if f.is_dir()])
+    if args.dataset == 'Imagenet-C':
+        data_path = args.data_dir+'/'+args.dataset
+        domains = []
+        for f in os.scandir(data_path):
+            if f.is_dir() and f.name != 'extra':
+                for d in os.scandir(data_path+'/'+f.name):
+                    if d.is_dir():
+                        domains.append(f.name+'/'+d.name)
+        domains.sort()
+    else:
+        data_path = os.path.join(args.data_dir,args.dataset)
+        domains = sorted([f.name for f in os.scandir(data_path) if f.is_dir()])
+
     tgt_domain = domains[args.target]
-    
+    print(tgt_domain)
     val_transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
     
-    target_dataset = ImageFolder(os.path.join(data_path,tgt_domain),transform=val_transform)
+    if args.dataset == 'Imagenet-C':
+        target_dataset = ImageFolder(os.path.join(data_path,tgt_domain+f'/{args.severity}'),transform=val_transform)
+    else:
+        target_dataset = ImageFolder(os.path.join(data_path,tgt_domain),transform=val_transform)
+    
+    if args.few_shot is not None:
+        _, test_ind, _, _ = train_test_split(range(len(target_dataset)),target_dataset.targets,
+        stratify=target_dataset.targets,test_size=len(target_dataset.classes)*args.few_shot,random_state=1)
+        target_subset = torch.utils.data.Subset(target_dataset,test_ind)
+        return target_dataset,target_subset,tgt_domain
+
     return target_dataset,tgt_domain
     
     
