@@ -2,15 +2,20 @@ import argparse
 import os
 import json
 import torch
+import torchvision
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from model import ERM
 from dataset import get_target_dataset
 import utils
+import warnings
+
+warnings.filterwarnings(action='ignore')
+
 
 parser = argparse.ArgumentParser(description='Adapt and test on target domain')
-parser.add_argument('--data_dir', default='/data/domainbed',type=str,
+parser.add_argument('--data_dir', default='/data2/domainbed',type=str,
                     help='Data directory')
 parser.add_argument('--dataset', default='PACS',type=str,
                     help='Data directory')
@@ -34,6 +39,12 @@ parser.add_argument('--seed', default=0,type=int,
                     help='Random seed')
 parser.add_argument('--adapt_epoch', default=10,type=int,
                     help='Adaptation epoch')
+parser.add_argument('--severity', default=5,type=int,
+                    help='severity of Imagenet-C')
+parser.add_argument('--few_shot', default=None,type=int,
+                    help='adapt for a few images')
+parser.add_argument('--source_type', default='single',type=str,
+                    help='type of source domain dataset')
 args = parser.parse_args()
 
 def freeze_option(model,adapt):
@@ -80,28 +91,37 @@ def adapt_to_target(ckpt_path):
     Adapt source-trained model on whole target domain data & test on it
     TODO : split target domain into adapt / test set
     '''
-    upper_path = os.path.dirname(ckpt_path)
-    with open(os.path.join(upper_path,'config.json'),'r') as f:
-        config = json.load(f)
-    arg_dict = vars(args)
-    for k,v in config.items():
-        if k not in arg_dict.keys():
-            arg_dict[k] = v
-    args.work_dir = upper_path
+    if args.dataset != 'Imagenet-C':
+        upper_path = os.path.dirname(ckpt_path)
+        with open(os.path.join(upper_path,'config.json'),'r') as f:
+            config = json.load(f)
+        arg_dict = vars(args)
+        for k,v in config.items():
+            if k not in arg_dict.keys():
+                arg_dict[k] = v
+        args.work_dir = upper_path
     # Set seed
     utils.set_seed(args.seed)    
     
     # load target dataset
     assert args.target is not None
-    target_dataset, target_domain = get_target_dataset(args)
+    if args.few_shot is not None:
+        target_dataset, target_subset, target_domain = get_target_dataset(args)
+    else:
+        target_dataset, target_domain = get_target_dataset(args)
+        target_subset = target_dataset
+    
     num_classes = len(target_dataset.classes)
-    adapt_loader = DataLoader(target_dataset,batch_size=args.batch_size,shuffle=True,num_workers=4)
+    adapt_loader = DataLoader(target_subset,batch_size=args.batch_size,shuffle=True,num_workers=4)
     test_loader = DataLoader(target_dataset,batch_size=args.batch_size,shuffle=False,num_workers=4)
     
     # load model
-    model = ERM(num_classes).cuda()
-    ckpt = torch.load(ckpt_path)['ckpt']
-    model.load_state_dict(ckpt)
+    if args.dataset != 'Imagenet-C':
+        model = ERM(num_classes).cuda()
+        ckpt = torch.load(ckpt_path)['ckpt']
+        model.load_state_dict(ckpt)
+    else:
+        model = torchvision.models.resnet50(pretrained=True).cuda()
     
     criterion = nn.CrossEntropyLoss()
     if args.adapt == 'stat' or args.adapt is None:
@@ -109,7 +129,7 @@ def adapt_to_target(ckpt_path):
     else:
         bn_params = utils.get_bn_params(model,affine=args.adapt)
         optimizer = torch.optim.Adam(bn_params,lr=args.lr, weight_decay=args.wd)
-        
+    
     # Adapt to target data
     if args.adapt is None:
         freeze_option(model,args.adapt)
@@ -133,15 +153,19 @@ def adapt_to_target(ckpt_path):
             utils.print_row([v for k,v in result.items()],colwidth=12)
 
     # inspect
-    init_ckpt = torch.load(ckpt_path)['ckpt']
-    adapted_ckpt = model.state_dict()
+    if args.dataset == 'Imagenet-C':
+        init_ckpt = torchvision.models.resnet50(pretrained=True).state_dict()
+        adapted_ckpt = model.to('cpu').state_dict()
+    else:
+        init_ckpt = torch.load(ckpt_path)['ckpt']
+        adapted_ckpt = model.state_dict()
     updated_param = []
+
     for k,v in init_ckpt.items():
         if not torch.allclose(v,adapted_ckpt[k]):
             updated_param.append(k)
     if len(updated_param) == 0:
-        print("No updated parameter")
-        
+        print("No updated parameter")  
     else:
         should_be_0 = []
         for param in updated_param:
@@ -178,45 +202,38 @@ def adapt_to_target(ckpt_path):
     
     return result['test_acc']
 
-if __name__ == '__main__':
-    source_type = 'single'
-    
+if __name__ == '__main__':    
     if args.ckpt is not None:
         adapt_to_target(args.ckpt)
-    elif source_type == 'single':
-        # Dataset, adapt method should be passed
-        num_domain = 4 if args.dataset in ['PACS','office_home'] else 6
+    else:
+        num_domain = 4 if args.dataset in ['PACS','office_home','terra_incognita','VLCS'] else 6    
+        if args.dataset == 'Imagenet-C':
+            num_domain = 15
+        source_type = args.source_type
+        dir_name = {'single':'source','multi':'target'}
         target_acc = {}
         if args.target is not None:
             targets = [args.target]
         else:
             targets = list(range(num_domain))
         for target in targets:
-            for domain in range(num_domain):
-                if domain == target:
-                    continue
-                path = f"./ckpts/{args.dataset}_{source_type}_source/source_{domain}"
-                path = os.path.join(path,os.listdir(path)[0],'ckpt.pth')
-                print(f"{args.dataset} {source_type} source @ domain {domain} -> {target}")
+            if source_type == 'multi':
                 args.target = target
+                path = f"/nas/datahub/SFDA/ckpts/{args.dataset}_{source_type}_source/{dir_name[source_type]}_{target}"
+                path = os.path.join(path,os.listdir(path)[0],'ckpt.pth')
+                print(f"{args.dataset} {source_type} source @ domain {target} adapt to {target}")
                 test_acc = adapt_to_target(path)
-                target_acc[f'source{domain}@target{target}'] = test_acc
-        print(target_acc)
-    
-    elif source_type == 'multi':
-        num_domain = 4 if args.dataset in ['PACS','office_home'] else 6
-        target_acc = {}
-        if args.target is not None:
-            targets = [args.target]
-        else:
-            targets = list(range(num_domain))
-        for target in targets:
-            path = f"./ckpts/{args.dataset}_multi_source/target_{target}"
-            path = os.path.join(path,os.listdir(path)[0],'ckpt.pth')
-            source_domains = list(range(num_domain))
-            source_domains.remove(target)
-            print(f"{args.dataset} {source_type} source @ domain {source_domains} -> {target}")
-            args.target = target
-            test_acc = adapt_to_target(path)
-            target_acc[f'source{source_domains}@target{target}'] = test_acc
+                target_acc[f'source{target}@target{target}'] = test_acc
+            else:
+                for domain in range(num_domain):
+                    if domain == target:
+                        continue
+                    args.target = target
+                    if args.dataset != 'Imagenet-C':
+                        path = f"/nas/datahub/SFDA/ckpts/{args.dataset}_{source_type}_source/{dir_name[source_type]}_{domain}"
+                        path = os.path.join(path,os.listdir(path)[0],'ckpt.pth')
+                        print(f"{args.dataset} {source_type} source @ domain {domain} adapt to {target}")
+                    else: path = None
+                    test_acc = adapt_to_target(path)
+                    target_acc[f'source{domain}@target{target}'] = test_acc
         print(target_acc)
