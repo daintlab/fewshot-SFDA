@@ -103,23 +103,39 @@ def get_target_dataset(args):
 
     tgt_domain = domains[args.target]
     print(tgt_domain)
+
+    train_transform = transforms.Compose([
+        transforms.RandomResizedCrop(224, scale=(0.7, 1.0)),
+        transforms.RandomHorizontalFlip(),
+        # transforms.ColorJitter(0.3, 0.3, 0.3, 0.3),
+        # transforms.RandomGrayscale(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
     val_transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
     
+     
     if args.dataset == 'Imagenet-C':
-        target_dataset = ImageFolder(os.path.join(data_path,tgt_domain+f'/{args.severity}'),transform=val_transform)
+        path = data_path + f'/{tgt_domain}/{args.severity}'
     else:
-        target_dataset = ImageFolder(os.path.join(data_path,tgt_domain),transform=val_transform)
+        path = data_path + f'/{tgt_domain}'
+
+    target_dataset = ImageFolder(os.path.join(path),transform=val_transform)
+    
+    if args.augmentation:
+        train_dataset = ImageFolder(os.path.join(path),transform=train_transform)
+    else:
+        train_dataset = target_dataset
     
     if args.few_shot is not None:
-        _, test_ind, _, _ = train_test_split(range(len(target_dataset)),target_dataset.targets,
-        stratify=target_dataset.targets,test_size=len(target_dataset.classes)*args.few_shot,random_state=1)
-        target_subset = torch.utils.data.Subset(target_dataset,test_ind)
-        return target_dataset,target_subset,tgt_domain
+        _, test_ind, _, _ = train_test_split(range(len(train_dataset)),train_dataset.targets,
+                            stratify=train_dataset.targets,test_size=len(train_dataset.classes)*args.few_shot,random_state=1)
+        train_dataset = torch.utils.data.Subset(train_dataset,test_ind)
 
-    return target_dataset,tgt_domain
+    return train_dataset,target_dataset,tgt_domain
     
     
