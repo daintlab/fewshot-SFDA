@@ -45,6 +45,8 @@ parser.add_argument('--few_shot', default=None,type=int,
                     help='adapt for a few images')
 parser.add_argument('--source_type', default='single',type=str,
                     help='type of source domain dataset')
+parser.add_argument('--augmentation', action='store_true',
+                    help='apply augmentation for training stage')
 args = parser.parse_args()
 
 def freeze_option(model,adapt):
@@ -106,13 +108,12 @@ def adapt_to_target(ckpt_path):
     # load target dataset
     assert args.target is not None
     if args.few_shot is not None:
-        target_dataset, target_subset, target_domain = get_target_dataset(args)
+        train_dataset, target_dataset, target_domain = get_target_dataset(args)
     else:
-        target_dataset, target_domain = get_target_dataset(args)
-        target_subset = target_dataset
+        train_dataset, target_dataset, target_domain = get_target_dataset(args)
     
     num_classes = len(target_dataset.classes)
-    adapt_loader = DataLoader(target_subset,batch_size=args.batch_size,shuffle=True,num_workers=4)
+    adapt_loader = DataLoader(train_dataset,batch_size=args.batch_size,shuffle=True,num_workers=4)
     test_loader = DataLoader(target_dataset,batch_size=args.batch_size,shuffle=False,num_workers=4)
     
     # load model
@@ -219,12 +220,12 @@ if __name__ == '__main__':
         
         path = None
         for target in targets:
-            if source_type == 'multi' or args.dataset == 'Imagenet-C':
+            if source_type == 'multi':
                 args.target = target
                 if args.dataset != 'Imagenet-C':
                     path = f"/nas/datahub/SFDA/ckpts/{args.dataset}_{source_type}_source/{dir_name[source_type]}_{target}"
                     path = os.path.join(path,os.listdir(path)[0],'ckpt.pth')
-                    print(f"{args.dataset} {source_type} source @ domain {target} adapt to {target}")
+                print(f"{args.dataset} {source_type} source @ domain {target} adapt to {target}")
                 test_acc = adapt_to_target(path)
                 target_acc[f'source{target}@target{target}'] = test_acc
             else:
@@ -235,7 +236,8 @@ if __name__ == '__main__':
                         args.target = target
                         path = f"/nas/datahub/SFDA/ckpts/{args.dataset}_{source_type}_source/{dir_name[source_type]}_{domain}"
                         path = os.path.join(path,os.listdir(path)[0],'ckpt.pth')
-                        print(f"{args.dataset} {source_type} source @ domain {domain} adapt to {target}")
+                    print(f"{args.dataset} {source_type} source @ domain {domain} adapt to {target}")
                     test_acc = adapt_to_target(path)
                     target_acc[f'source{domain}@target{target}'] = test_acc
         print(target_acc)
+        print(f'mean: {torch.mean(torch.tensor(list(target_acc.values()))):.2f}')
