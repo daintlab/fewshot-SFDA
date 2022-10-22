@@ -5,6 +5,7 @@ import torch
 import torchvision
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from collections import OrderedDict
 
 from model import ERM
 from dataset import get_target_dataset
@@ -91,7 +92,6 @@ def test(model,criterion,loader):
 def adapt_to_target(ckpt_path):
     '''
     Adapt source-trained model on whole target domain data & test on it
-    TODO : split target domain into adapt / test set
     '''
     if args.dataset != 'Imagenet-C':
         upper_path = os.path.dirname(ckpt_path)
@@ -107,14 +107,12 @@ def adapt_to_target(ckpt_path):
     
     # load target dataset
     assert args.target is not None
-    if args.few_shot is not None:
-        train_dataset, target_dataset, target_domain = get_target_dataset(args)
-    else:
-        train_dataset, target_dataset, target_domain = get_target_dataset(args)
+    adapt_dataset, test_dataset, target_domain = get_target_dataset(args)
     
-    num_classes = len(target_dataset.classes)
-    adapt_loader = DataLoader(train_dataset,batch_size=args.batch_size,shuffle=True,num_workers=4)
-    test_loader = DataLoader(target_dataset,batch_size=args.batch_size,shuffle=False,num_workers=4)
+    num_classes = len(test_dataset.underlying_dataset.classes)
+    # TODO : change adapt dataloader -> infinite dataloader
+    adapt_loader = DataLoader(adapt_dataset,batch_size=args.batch_size,shuffle=True,num_workers=4)
+    test_loader = DataLoader(test_dataset,batch_size=args.batch_size,shuffle=False,num_workers=4)
     
     # load model
     if args.dataset != 'Imagenet-C':
@@ -125,6 +123,7 @@ def adapt_to_target(ckpt_path):
         model = torchvision.models.resnet50(pretrained=True).cuda()
     
     criterion = nn.CrossEntropyLoss()
+
     if args.adapt == 'stat' or args.adapt is None:
         optimizer = None
     else:
@@ -239,5 +238,6 @@ if __name__ == '__main__':
                     print(f"{args.dataset} {source_type} source @ domain {domain} adapt to {target}")
                     test_acc = adapt_to_target(path)
                     target_acc[f'source{domain}@target{target}'] = test_acc
+        target_acc = OrderedDict(sorted(target_acc.items()))
         print(target_acc)
         print(f'mean: {torch.mean(torch.tensor(list(target_acc.values()))):.2f}')
