@@ -17,7 +17,7 @@ warnings.filterwarnings(action='ignore')
 
 
 parser = argparse.ArgumentParser(description='Adapt and test on target domain')
-parser.add_argument('--data_dir', default='/data2/domainbed',type=str,
+parser.add_argument('--data_dir', default='/data/domainbed',type=str,
                     help='Data directory')
 parser.add_argument('--dataset', default='PACS',type=str,
                     help='Data directory')
@@ -25,21 +25,19 @@ parser.add_argument('--target', default=None,type=int,
                     help='Index of target domain')
 parser.add_argument('--ckpt', default=None,type=str,
                     help='path to source trained model')
-parser.add_argument('--save_path', default='./result',type=str,
-                    help='Save path')
 parser.add_argument('--adapt', default=None,type=str,
                     help='Adapt mode')
 parser.add_argument('--batch_size', default=32,type=int,
                     help='Batch size per domain')
-parser.add_argument('--lr', default=5e-05,type=float,
+parser.add_argument('--lr', default=0.001,type=float,
                     help='Learning rate')
-parser.add_argument('--wd', default=1e-06,type=float,
+parser.add_argument('--wd', default=0,type=float,
                     help='Weight decay')
 parser.add_argument('--ratio', default=0.2,type=float,
                     help='Holdout ratio')
 parser.add_argument('--seed', default=0,type=int,
                     help='Random seed')
-parser.add_argument('--adapt_step', default=5000,type=int,
+parser.add_argument('--adapt_step', default=1000,type=int,
                     help='Adaptation step')
 parser.add_argument('--val_freq', default=100,type=int,
                     help='Validation frequency')
@@ -249,8 +247,8 @@ if __name__ == '__main__':
                 args.source = ''.join(args.source)
                 print(f"{args.dataset} {source_type} source {args.source} -> target {args.target}")
                 best_acc,last_acc = adapt_to_target(path)
-                last_target_acc[f'source{target}@target{target}'] = last_acc
-                best_target_acc[f'source{target}@target{target}'] = best_acc
+                last_target_acc[f'source{args.source}@target{target}'] = last_acc
+                best_target_acc[f'source{args.source}@target{target}'] = best_acc
             else:
                 for domain in range(num_domain):
                     if domain == target:
@@ -262,8 +260,8 @@ if __name__ == '__main__':
                     args.source = domain
                     print(f"{args.dataset} {source_type} source {args.source} -> target {target}")
                     best_acc,last_acc = adapt_to_target(path)
-                    last_target_acc[f'source{target}@target{target}'] = last_acc
-                    best_target_acc[f'source{target}@target{target}'] = best_acc
+                    last_target_acc[f'source{domain}@target{target}'] = last_acc
+                    best_target_acc[f'source{domain}@target{target}'] = best_acc
         
         best_target_acc = OrderedDict(sorted(best_target_acc.items()))
         last_target_acc = OrderedDict(sorted(last_target_acc.items()))
