@@ -46,6 +46,7 @@ def split_dataset(dataset, ratio=0.2, seed=0):
     return _SplitDataset(dataset, keys_1), _SplitDataset(dataset, keys_2)
 
 def get_transform(mode,type_='default'):
+    # TODO : define different type of augmentation
     if mode in ['val','test']:
         transform = transforms.Compose([
             transforms.Resize((224, 224)),
@@ -64,6 +65,8 @@ def get_transform(mode,type_='default'):
                 transforms.Normalize(
                     mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ])
+        else:
+            raise ValueError("Wrong transform type")    
     else:
         raise ValueError("Wrong transform mode")
         
@@ -138,7 +141,8 @@ def get_target_dataset(args):
 
     target_dataset = ImageFolder(os.path.join(path))
     train_dataset, test_dataset = split_dataset(target_dataset, ratio=args.ratio, seed=args.seed)
-    train_dataset.transform = get_transform(mode='train') # TODO : pass different type
+
+    train_dataset.transform = get_transform(mode='train',type_=args.aug)
     test_dataset.transform = get_transform(mode='test')
         
     if args.few_shot:

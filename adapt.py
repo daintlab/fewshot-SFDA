@@ -9,6 +9,7 @@ from collections import OrderedDict
 
 from model import ERM
 from dataset import get_target_dataset
+from data_loader import InfiniteDataLoader
 import utils
 import warnings
 
@@ -38,16 +39,18 @@ parser.add_argument('--ratio', default=0.2,type=float,
                     help='Holdout ratio')
 parser.add_argument('--seed', default=0,type=int,
                     help='Random seed')
-parser.add_argument('--adapt_epoch', default=10,type=int,
-                    help='Adaptation epoch')
+parser.add_argument('--adapt_step', default=5000,type=int,
+                    help='Adaptation step')
+parser.add_argument('--val_freq', default=100,type=int,
+                    help='Validation frequency')
 parser.add_argument('--severity', default=5,type=int,
                     help='severity of Imagenet-C')
 parser.add_argument('--few_shot', default=None,type=int,
                     help='adapt for a few images')
 parser.add_argument('--source_type', default='single',type=str,
                     help='type of source domain dataset')
-parser.add_argument('--augmentation', action='store_true',
-                    help='apply augmentation for training stage')
+parser.add_argument('--aug', default='default',type=str, choices=['default'],
+                    help='Type of augmentation for training stage')
 args = parser.parse_args()
 
 def freeze_option(model,adapt):
@@ -56,23 +59,19 @@ def freeze_option(model,adapt):
     else:
         model.eval()
     
-def adapt(model,criterion,optimizer,loader):
-    adapt_loss = utils.AverageMeter()
-    adapt_acc = utils.AverageMeter()
-    for i,(x,y) in enumerate(loader):
-        x,y = x.cuda(),y.cuda()
-        output = model(x)
-        loss = criterion(output,y)
-        
-        if optimizer is not None:
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            
-        acc,_= utils.accuracy(output,y,topk=(1,5))
-        adapt_loss.update(loss.item(),x.size(0))
-        adapt_acc.update(acc[0].item(),x.size(0))
-    return adapt_loss.avg, adapt_acc.avg
+def adapt(model,criterion,optimizer,data,target):
+    freeze_option(model,args.adapt)
+    data,target = data.cuda(),target.cuda()
+    output = model(data)
+    loss = criterion(output,target)
+    
+    if optimizer is not None:
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    
+    acc,_= utils.accuracy(output,target,topk=(1,5))
+    return loss.item(), acc
         
 def test(model,criterion,loader):
     model.eval()
@@ -91,28 +90,24 @@ def test(model,criterion,loader):
 
 def adapt_to_target(ckpt_path):
     '''
-    Adapt source-trained model on whole target domain data & test on it
+    Adapt source-trained model on train set of target domain
+    Test on test set of target domain
     '''
-    if args.dataset != 'Imagenet-C':
-        upper_path = os.path.dirname(ckpt_path)
-        with open(os.path.join(upper_path,'config.json'),'r') as f:
-            config = json.load(f)
-        arg_dict = vars(args)
-        for k,v in config.items():
-            if k not in arg_dict.keys():
-                arg_dict[k] = v
-        args.work_dir = upper_path
+    args.work_dir = f'adapt_result/{args.dataset}_{args.source_type}/{args.adapt}/source{args.source}_target{args.target}'
+    os.makedirs(args.work_dir,exist_ok=True)
+    with open(os.path.join(args.work_dir,'config.json'),'w') as f:
+        json.dump(args.__dict__,f,indent=2)
     # Set seed
-    utils.set_seed(args.seed)    
+    utils.set_seed(args.seed)
     
     # load target dataset
     assert args.target is not None
     adapt_dataset, test_dataset, target_domain = get_target_dataset(args)
     
     num_classes = len(test_dataset.underlying_dataset.classes)
-    # TODO : change adapt dataloader -> infinite dataloader
-    adapt_loader = DataLoader(adapt_dataset,batch_size=args.batch_size,shuffle=True,num_workers=4)
-    test_loader = DataLoader(test_dataset,batch_size=args.batch_size,shuffle=False,num_workers=4)
+    
+    adapt_loader = InfiniteDataLoader(adapt_dataset,batch_size=args.batch_size,num_workers=4)
+    test_loader = DataLoader(test_dataset,batch_size=args.batch_size*3,shuffle=False,num_workers=4)
     
     # load model
     if args.dataset != 'Imagenet-C':
@@ -136,21 +131,43 @@ def adapt_to_target(ckpt_path):
         test_loss,test_acc = test(model,criterion,test_loader)
         print(f"No adapt  Test Loss : {test_loss:.6f} Test Acc : {test_acc:.6f}")
         result = {'test_acc':test_acc}
+        best_acc = test_acc
     else:
-        for epoch in range(args.adapt_epoch):
-            freeze_option(model,args.adapt)
-            adapt_loss,adapt_acc = adapt(model,criterion,optimizer,adapt_loader)
-            test_loss,test_acc = test(model,criterion,test_loader)
-            result = {
-                'adapt_epoch' : epoch,
-                'adapt_loss' : adapt_loss,
-                'adapt_acc' : adapt_acc,
-                'test_loss' : test_loss,
-                'test_acc' : test_acc
-            }
-            if epoch == 0:
-                utils.print_row([k for k,v in result.items()],colwidth=12)
-            utils.print_row([v for k,v in result.items()],colwidth=12)
+        adapt_iterator = iter(adapt_loader)
+        adapt_loss = utils.AverageMeter()
+        adapt_acc = utils.AverageMeter()
+        best_acc = 0
+        for step in range(args.adapt_step):            
+            x,y = next(adapt_iterator)
+            loss,acc = adapt(model,criterion,optimizer,x,y)
+            adapt_loss.update(loss,x.size(0))
+            adapt_acc.update(acc[0].item(),x.size(0))    
+
+            # Logging & Test
+            if step % args.val_freq == 0:
+                result = {
+                    'adapt_step' : step,
+                    'adapt_loss' : adapt_loss.avg,
+                    'adapt_acc' : adapt_acc.avg,
+                }
+                adapt_loss.reset()
+                adapt_acc.reset()
+                
+                # Test on target test set
+                test_loss,test_acc = test(model,criterion,test_loader)
+                result['test_loss'] = test_loss
+                result['test_acc'] = test_acc
+                
+                if step == 0:
+                    utils.print_row([k for k,v in result.items()],colwidth=12)
+                utils.print_row([v for k,v in result.items()],colwidth=12)
+                
+                with open(os.path.join(args.work_dir,'adapt_log.json'),'a') as f:
+                    f.write(json.dumps(result,sort_keys=True)+"\n")
+                
+                # Best acc
+                if test_acc > best_acc:
+                    best_acc = test_acc
 
     # inspect
     if args.dataset == 'Imagenet-C':
@@ -200,18 +217,20 @@ def adapt_to_target(ckpt_path):
         if len(should_be_0) != 0:
             print(should_be_0)
     
-    return result['test_acc']
+    return best_acc, result['test_acc']
 
-if __name__ == '__main__':    
+if __name__ == '__main__':
     if args.ckpt is not None:
         adapt_to_target(args.ckpt)
     else:
-        num_domain = 4 if args.dataset in ['PACS','office_home','terra_incognita','VLCS'] else 6    
+        num_domain = 4 if args.dataset in ['PACS','office_home','terra_incognita','VLCS'] else 6
         if args.dataset == 'Imagenet-C':
             num_domain = 15
-        source_type = args.source_type
+            args.source_type = 'multi'
+        source_type = args.source_type    
         dir_name = {'single':'source','multi':'target'}
-        target_acc = {}
+        last_target_acc = {}
+        best_target_acc = {}
         if args.target is not None:
             targets = [args.target]
         else:
@@ -224,9 +243,14 @@ if __name__ == '__main__':
                 if args.dataset != 'Imagenet-C':
                     path = f"/nas/datahub/SFDA/ckpts/{args.dataset}_{source_type}_source/{dir_name[source_type]}_{target}"
                     path = os.path.join(path,os.listdir(path)[0],'ckpt.pth')
-                print(f"{args.dataset} {source_type} source @ domain {target} adapt to {target}")
-                test_acc = adapt_to_target(path)
-                target_acc[f'source{target}@target{target}'] = test_acc
+                
+                source = list(range(num_domain))
+                args.source = [str(d) for d in source if d!= args.target]
+                args.source = ''.join(args.source)
+                print(f"{args.dataset} {source_type} source {args.source} -> target {args.target}")
+                best_acc,last_acc = adapt_to_target(path)
+                last_target_acc[f'source{target}@target{target}'] = last_acc
+                best_target_acc[f'source{target}@target{target}'] = best_acc
             else:
                 for domain in range(num_domain):
                     if domain == target:
@@ -235,9 +259,13 @@ if __name__ == '__main__':
                         args.target = target
                         path = f"/nas/datahub/SFDA/ckpts/{args.dataset}_{source_type}_source/{dir_name[source_type]}_{domain}"
                         path = os.path.join(path,os.listdir(path)[0],'ckpt.pth')
-                    print(f"{args.dataset} {source_type} source @ domain {domain} adapt to {target}")
-                    test_acc = adapt_to_target(path)
-                    target_acc[f'source{domain}@target{target}'] = test_acc
-        target_acc = OrderedDict(sorted(target_acc.items()))
-        print(target_acc)
-        print(f'mean: {torch.mean(torch.tensor(list(target_acc.values()))):.2f}')
+                    args.source = domain
+                    print(f"{args.dataset} {source_type} source {args.source} -> target {target}")
+                    best_acc,last_acc = adapt_to_target(path)
+                    last_target_acc[f'source{target}@target{target}'] = last_acc
+                    best_target_acc[f'source{target}@target{target}'] = best_acc
+        
+        best_target_acc = OrderedDict(sorted(best_target_acc.items()))
+        last_target_acc = OrderedDict(sorted(last_target_acc.items()))
+        print(f"Best target acc : \n{best_target_acc}")
+        print(f"Last target acc : \n{last_target_acc}")
