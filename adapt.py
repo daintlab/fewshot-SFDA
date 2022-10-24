@@ -144,7 +144,7 @@ def adapt_to_target(ckpt_path):
             adapt_acc.update(acc[0].item(),x.size(0))    
 
             # Logging & Test
-            if step % args.val_freq == 0:
+            if step % args.val_freq == 0 or step == args.adapt_step-1:
                 result = {
                     'adapt_step' : step,
                     'adapt_loss' : adapt_loss.avg,
