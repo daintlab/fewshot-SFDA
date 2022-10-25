@@ -54,6 +54,8 @@ args = parser.parse_args()
 def freeze_option(model,adapt):
     if adapt in ['stat','BN']:
         utils.freeze_except_bn(model)
+    elif adapt == 'fine-tune':
+        model.train()
     else:
         model.eval()
     
@@ -104,8 +106,8 @@ def adapt_to_target(ckpt_path):
     
     num_classes = len(test_dataset.underlying_dataset.classes)
     
-    adapt_loader = InfiniteDataLoader(adapt_dataset,batch_size=args.batch_size,num_workers=4)
-    test_loader = DataLoader(test_dataset,batch_size=args.batch_size*3,shuffle=False,num_workers=4)
+    adapt_loader = InfiniteDataLoader(adapt_dataset,batch_size=args.batch_size,num_workers=8)
+    test_loader = DataLoader(test_dataset,batch_size=args.batch_size*3,shuffle=False,num_workers=8)
     
     # load model
     if args.dataset != 'Imagenet-C':
@@ -120,8 +122,11 @@ def adapt_to_target(ckpt_path):
     if args.adapt == 'stat' or args.adapt is None:
         optimizer = None
     else:
-        bn_params = utils.get_bn_params(model,affine=args.adapt)
-        optimizer = torch.optim.Adam(bn_params,lr=args.lr, weight_decay=args.wd)
+        if args.adapt == 'fine-tune':
+            params = model.parameters()
+        else:
+            params = utils.get_bn_params(model,affine=args.adapt)
+        optimizer = torch.optim.Adam(params,lr=args.lr, weight_decay=args.wd)
     
     # Adapt to target data
     if args.adapt is None:
@@ -184,6 +189,8 @@ def adapt_to_target(ckpt_path):
     else:
         should_be_0 = []
         for param in updated_param:
+            if args.adapt == 'fine-tune':
+                continue
             if 'bn' not in param and 'downsample.1' not in param:
                 should_be_0.append(param)
             if args.adapt == 'stat':
