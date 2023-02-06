@@ -11,8 +11,7 @@ from collections import OrderedDict
 from sam import SAM
 import matplotlib.pyplot as plt
 from model import ERM,SHOT
-from dataset2 import get_target_dataset
-from dataset import get_target_dataset as get_target_dataset_robust
+from dataset import get_target_dataset
 from data_loader import InfiniteDataLoader
 import utils
 import warnings
@@ -114,10 +113,7 @@ def train_on_target(args):
     os.makedirs(save_path, exist_ok=True)
     
     # data
-    if args.robust:
-        train_dataset, val_dataset, test_dataset, target_domain = get_target_dataset_robust(args)
-    else:
-        train_dataset, val_dataset, test_dataset, target_domain = get_target_dataset(args)
+    train_dataset, val_dataset, test_dataset, target_domain = get_target_dataset(args)
     num_classes = len(test_dataset.underlying_dataset.classes)
 
     if len(train_dataset) < args.batch_size:
