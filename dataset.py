@@ -114,8 +114,11 @@ def get_target_dataset(args):
         # tr_name = [target_dataset.samples[i][0] for i in tr_idx]
         # val_name = [tr_name[i] for i in val_idx]
         # import pdb;pdb.set_trace()
-
-        val_dataset = ImageFolder(os.path.join(f'./valset_cor_{args.dataset}/{args.seed}/{tgt_domain}'), transform=get_transform(mode='test'))
+        
+        if args.robust:
+            val_dataset = ImageFolder(os.path.join(f'./valset_cor_{args.dataset}/{args.seed}/{tgt_domain}'), transform=get_transform(mode='test'))
+        else:
+            val_dataset = torch.utils.data.Subset(train_dataset,val_idx)
         adapt_dataset = torch.utils.data.Subset(train_dataset,few_shot_idx)
         
         # inspect few shot
