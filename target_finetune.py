@@ -80,7 +80,7 @@ def train_one_step(model,criterion,optimizer,x,y,args):
             if args.regmixup:
                 utils.mixup_criterion(criterion, model(x), targets_a, targets_b, lambd).backward()
             else:
-                utils.mixup_criterion(criterion, model(x), y_a, y_b, lambd).backward()
+                utils.mixup_criterion(criterion, model(mixed_x), y_a, y_b, lambd).backward()
         else:
             criterion(model(x), y).backward()
         optimizer.second_step(zero_grad=True)
