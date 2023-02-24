@@ -165,5 +165,8 @@ for lr in ['1e-1','1e-2','5e-2','1e-3','5e-3']:
             _, snd, _, _ =test_and_nd(100, test_loader, f'./snd_results/{dataset}_snd_log', netF, netB, netC)
             total_json[lr] += snd
 
-with open(os.path.join('./snd_results',f'{dataset}_snd.json'),'w') as f:
+save_folder = './snd_results'
+if not os.path.exists(save_folder):
+    os.makedirs(save_folder)
+with open(os.path.join(save_folder,f'{dataset}_snd.json'),'w') as f:
     json.dump(total_json, f)
