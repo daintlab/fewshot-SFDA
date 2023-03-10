@@ -53,7 +53,6 @@ parser.add_argument('--seed', default=0,type=int,help='Random seed')
 parser.add_argument('--oda_seed', default=2020,type=int,help='oda split Random seed')
 parser.add_argument('--subset',action='store_true',default=False,help='partial labeled dataset')
 parser.add_argument('--imbalance',action='store_true',default=False)
-parser.add_argument('--LPFT_use_best',action='store_true',default=False)
 args = parser.parse_args()
 
 def train_one_step(model,criterion,optimizer,x,y,args):
@@ -173,11 +172,11 @@ def train_on_target(args):
         model = SHOT(ckpts=args.ckpts, dataset=args.dataset, subset=args.subset).cuda()
     elif args.pretrain == 'SHOT_LPFT':
         model = SHOT_fe(ckpts=args.ckpts, dataset=args.dataset, subset=args.subset).cuda()
-    else:
-        # raise NotImplementedError
-        print('Source model is pretrained with ImageNet')
+    elif args.pretrain == 'IMGNET' or args.pretrain == 'IMGNET_LPFT:
         model = IMGNET(ckpts=args.ckpts, dataset=args.dataset).cuda()
-
+    else:
+        raise NotImplementedError
+      
     criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
     
     if args.adapt is not None:
@@ -212,9 +211,7 @@ def train_on_target(args):
     else:
         for step in range(args.adapt_step):
             x,y = next(train_iterator)
-            # x,y,params = next(train_iterator)
             loss,acc = train_one_step(model,criterion,optimizer,x,y,args)
-            # loss,acc = train_one_step(model,criterion,optimizer,x,y,params,args)
             train_loss.update(loss,x.size(0))
             train_acc.update(acc[0].item(),x.size(0))
             loss_plot.append(loss)
@@ -263,18 +260,6 @@ def train_on_target(args):
                     best_acc = test_acc
                     if args.dataset == 'VISDA-C' or args.dataset == 'VLCS' or args.dataset == 'terra_incognita' or args.imbalance:
                         best_per_class_acc = test_per_class_acc
-        # 충분히 수렴하는지 확인하기 위한 시각화 코드
-        # plt.plot(loss_plot, label='loss')
-        # plt.legend()
-        # plt.show()
-        # plt.savefig(f'./plot_{args.adapt}_{args.few_shot}shot_{args.source}_to_{args.target}_loss.png')
-        # plt.close()
-        # plt.plot(acc_plot, label='acc')
-        # plt.legend()
-        # plt.show()
-        # plt.savefig(f'./plot_{args.adapt}_{args.few_shot}shot_{args.source}_to_{args.target}_acc.png')
-        # plt.close()
-
         # Model save
         torch.save(model.to('cpu').state_dict(),os.path.join(save_path,'ckpt.pth'))
     if args.dataset == 'VISDA-C' or args.dataset == 'VLCS' or args.dataset == 'terra_incognita' or args.imbalance:
@@ -325,24 +310,20 @@ def get_ckpt(args):
         
     elif args.pretrain == 'SHOT_LPFT':
         if args.subset:
-            root_dir = f'./D_fine_tuning_output/{args.dataset}/SHOT_{args.dataset}_cls_{args.few_shot}shot_SAM_fixedval_lr_1e-3_subset_2020_0'
+            root_dir = f'./D_fine_tuning_output/{args.dataset}/SHOT_{args.dataset}_cls_{args.few_shot}shot_SAM_fixedval_lr_1e-4_subset_2020_0'
         elif args.imbalance:
-            root_dir = f'./D_fine_tuning_output/{args.dataset}/SHOT_{args.dataset}_cls_{args.few_shot}shot_SAM_fixedval_imbalance_lr_1e-3_0'
+            root_dir = f'./D_fine_tuning_output/{args.dataset}/SHOT_{args.dataset}_cls_{args.few_shot}shot_SAM_fixedval_imbalance_lr_1e-4_0'
         else:
-            root_dir = f'./D_fine_tuning_output/{args.dataset}/SHOT_{args.dataset}_cls_{args.few_shot}shot_SAM_fixedval_lr_1e-3_0'
-  
-        if args.LPFT_use_best:
-            ckpts = os.path.join(root_dir,f'source{args.source}/target{args.target}/best_ckpt.pth')        
-        else:
-            ckpts = os.path.join(root_dir,f'source{args.source}/target{args.target}/ckpt.pth')
-    
-    else:
-        # raise NotImplementedError        
-        # ckpts = None
-        root_dir = f'/nas/home/tmddnjs3467/domain-generalization/source_free_DA/D_fine_tuning_output/{args.dataset}/IMGNET_office_home_cls_1shot_SAM_fixedval_lr_1e-3_{args.seed}'
+            root_dir = f'./D_fine_tuning_output/{args.dataset}/SHOT_{args.dataset}_cls_{args.few_shot}shot_SAM_fixedval_lr_1e-4_0'
+    elif args.pretrain == 'IMGNET
+        ckpts = None
+        print('Source model is pretrained with ImageNet')    
+    elif args.pretrain == 'IMGNET_LPFT:
+        root_dir = f'/nas/home/tmddnjs3467/domain-generalization/source_free_DA/D_fine_tuning_output/{args.dataset}/IMGNET_office_home_cls_1shot_SAM_fixedval_lr_1e-4_{args.seed}'
         ckpts = os.path.join(root_dir,f'source{args.source}/target{args.target}/ckpt.pth')
-        print('Source model is pretrained with ImageNet')
-
+    else:
+        raise NotImplementedError        
+  
     return ckpts
 
 def main():
