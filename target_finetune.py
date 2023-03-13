@@ -27,7 +27,7 @@ parser.add_argument('--dataset', default='PACS',type=str,
 parser.add_argument('--work_dir', default='./result',type=str,help='Working directory')
 parser.add_argument('--source', default=None,type=int,help='Index of source domain')
 parser.add_argument('--target', default=None,type=int,help='Index of target domain')
-parser.add_argument('--pretrain', default='SHOT',type=str,choices=['SHOT','SHOT_LPFT','IMGNET'],help='Source pretrain strategy')
+parser.add_argument('--pretrain', default='SHOT',type=str,choices=['SHOT','SHOT_LPFT','IMGNET','IMGNET_LPFT'],help='Source pretrain strategy')
 
 parser.add_argument('--adapt', default=None,type=str,choices=['cls','clsBN','BN','feat','all'],help='Fine-tuning method')
 parser.add_argument('--adapt_step', default=1000,type=int,help='Adaptation step')
