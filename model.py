@@ -2,7 +2,7 @@ import torch.nn as nn
 import torchvision
 import torch.nn.functional as F
 import torch
-
+from collections import OrderedDict
 import torch.nn.utils.weight_norm as weightNorm
 from torchvision import models
 
@@ -80,30 +80,59 @@ class ERMWithFeature(nn.Module):
             return logit
 
 class SHOT(nn.Module):
-    def __init__(self,ckpts,dataset='office_home'):
+    def __init__(self,ckpts,dataset='office_home',subset=False):
         super(SHOT,self).__init__()
-        config = {
-            'office_home' : {
-                'arch' : 'resnet50',
-                'class_num' : 65,
-                'bottleneck_dim' : 256
-            },
-            'PACS' : {
-                'arch' : 'resnet50',
-                'class_num' : 7,
-                'bottleneck_dim' : 256
-            },
-            'VLCS' : {
-                'arch' : 'resnet50',
-                'class_num' : 5,
-                'bottleneck_dim' : 256
-            },
-            'office31' : {
-                'arch' : 'resnet50',
-                'class_num' : 31,
-                'bottleneck_dim' : 256
+        if subset:
+            config = {
+                'office_home' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 25,
+                    'bottleneck_dim' : 256
+                },
+                'office31' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 10,
+                    'bottleneck_dim' : 256
+                },
+                'VISDA-C' : {
+                    'arch' : 'resnet101',
+                    'class_num' : 6,
+                    'bottleneck_dim' : 256
+                }
             }
-        }
+        else:
+            config = {
+                'office_home' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 65,
+                    'bottleneck_dim' : 256
+                },
+                'PACS' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 7,
+                    'bottleneck_dim' : 256
+                },
+                'VLCS' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 5,
+                    'bottleneck_dim' : 256
+                },
+                'office31' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 31,
+                    'bottleneck_dim' : 256
+                },
+                'terra_incognita' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 8,
+                    'bottleneck_dim' : 256
+                },
+                'VISDA-C' : {
+                    'arch' : 'resnet101',
+                    'class_num' : 12,
+                    'bottleneck_dim' : 256
+                }
+            }
         self.netF = ResBase(res_name=config[dataset]['arch'])
         self.netB = feat_bottleneck(
             type='bn',
@@ -118,7 +147,118 @@ class SHOT(nn.Module):
         self.netF.load_state_dict(torch.load(ckpts['netF']))
         self.netB.load_state_dict(torch.load(ckpts['netB']))
         self.netC.load_state_dict(torch.load(ckpts['netC']))
-    
+        # self.head = torch.nn.Linear(256, 4)
+    # def forward(self,x):
+    def forward(self,x,flag=True):
+        if flag:
+            return self.netC(self.netB(self.netF(x)))
+        else:
+            feat = self.netB(self.netF(x))
+            output = self.netC(feat)
+            c_output = self.head(feat)
+            return output, c_output
+    def infer(self,x):
+        return self.netC(self.netB(self.netF(x)))
+    def get_feature(self,x):
+        return self.netF(x)
+    def get_output(self,x):
+        return self.netC(self.netB(x))
+class SHOT_fe(nn.Module):
+    def __init__(self,ckpts,dataset='office_home',subset=False):
+        super(SHOT_fe,self).__init__()
+        if subset:
+            config = {
+                'office_home' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 25,
+                    'bottleneck_dim' : 256
+                },
+                'PACS' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 7,
+                    'bottleneck_dim' : 256
+                },
+                'VLCS' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 5,
+                    'bottleneck_dim' : 256
+                },
+                'office31' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 10,
+                    'bottleneck_dim' : 256
+                },
+                'terra_incognita' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 8,
+                    'bottleneck_dim' : 256
+                },
+                'VISDA-C' : {
+                    'arch' : 'resnet101',
+                    'class_num' : 6,
+                    'bottleneck_dim' : 256
+                }
+            }
+        else:
+            config = {
+                'office_home' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 65,
+                    'bottleneck_dim' : 256
+                },
+                'PACS' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 7,
+                    'bottleneck_dim' : 256
+                },
+                'VLCS' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 5,
+                    'bottleneck_dim' : 256
+                },
+                'office31' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 31,
+                    'bottleneck_dim' : 256
+                },
+                'terra_incognita' : {
+                    'arch' : 'resnet50',
+                    'class_num' : 8,
+                    'bottleneck_dim' : 256
+                },
+                'VISDA-C' : {
+                    'arch' : 'resnet101',
+                    'class_num' : 12,
+                    'bottleneck_dim' : 256
+                }
+            }
+        self.netF = ResBase(res_name=config[dataset]['arch'])
+        self.netB = feat_bottleneck(
+            type='bn',
+            feature_dim=self.netF.in_features,
+            bottleneck_dim=config[dataset]['bottleneck_dim']
+        )
+        self.netC = feat_classifier(
+            type='wn',
+            class_num=config[dataset]['class_num'],
+            bottleneck_dim=config[dataset]['bottleneck_dim']
+        )
+        if ckpts is not None:
+            state_dict = torch.load(ckpts)
+            F = OrderedDict()
+            B = OrderedDict()
+            C = OrderedDict()
+            for k, v in state_dict.items():
+                if k.startswith('netF'):
+                    F[k.replace('netF.', '')] = v
+                elif k.startswith('netB'):
+                    B[k.replace('netB.', '')] = v
+                elif k.startswith('netC'):
+                    C[k.replace('netC.', '')] = v
+            self.netF.load_state_dict(F)
+            self.netB.load_state_dict(B)
+            self.netC.load_state_dict(C)
+        
     def forward(self,x):
         return self.netC(self.netB(self.netF(x)))
 
@@ -145,6 +285,11 @@ class SHOT_ODA(nn.Module):
                 'arch' : 'resnet50',
                 'class_num' : 31,
                 'bottleneck_dim' : 256
+            },
+            'VISDA-C' : {
+                'arch' : 'resnet101',
+                'class_num' : 12,
+                'bottleneck_dim' : 256
             }
         }
         self.netF = ResBase(res_name=config[dataset]['arch'])
@@ -164,6 +309,63 @@ class SHOT_ODA(nn.Module):
     
     def forward(self,x):
         return self.netC(self.netB(self.netF(x)))
+
+class IMGNET(nn.Module):
+    def __init__(self,ckpts=None,dataset='office_home'):
+        super(IMGNET,self).__init__()
+        config = {
+            'office_home' : {
+                'arch' : 'resnet50',
+                'class_num' : 65,
+                'bottleneck_dim' : 256
+            },
+            'PACS' : {
+                'arch' : 'resnet50',
+                'class_num' : 7,
+                'bottleneck_dim' : 256
+            },
+            'VLCS' : {
+                'arch' : 'resnet50',
+                'class_num' : 5,
+                'bottleneck_dim' : 256
+            },
+            'office31' : {
+                'arch' : 'resnet50',
+                'class_num' : 31,
+                'bottleneck_dim' : 256
+            },
+            'terra_incognita' : {
+                'arch' : 'resnet50',
+                'class_num' : 8,
+                'bottleneck_dim' : 256
+            },
+            'VISDA-C' : {
+                'arch' : 'resnet101',
+                'class_num' : 12,
+                'bottleneck_dim' : 256
+            }
+        }
+        self.netF = ResBase(res_name=config[dataset]['arch'])
+        self.netC = torch.nn.Linear(self.netF.in_features, config[dataset]['class_num'])
+        if ckpts is not None:
+            state_dict = torch.load(ckpts)
+            F = OrderedDict()
+            C = OrderedDict()
+            for k, v in state_dict.items():
+                if k.startswith('netF'):
+                    F[k.replace('netF.', '')] = v
+                elif k.startswith('netC'):
+                    C[k.replace('netC.', '')] = v
+            self.netF.load_state_dict(F)
+            self.netC.load_state_dict(C)
+        self.linear_transform = torch.nn.Linear(self.netF.in_features, 256)
+    def forward(self,x):
+        return self.netC(self.netF(x))
+    def infer(self,x):
+        return self.netC(self.netF(x))
+    def get_feature(self,x):
+        return self.netF(x)
+    
 
 res_dict = {"resnet18":models.resnet18, "resnet34":models.resnet34, "resnet50":models.resnet50, 
 "resnet101":models.resnet101, "resnet152":models.resnet152, "resnext50":models.resnext50_32x4d, "resnext101":models.resnext101_32x8d}
