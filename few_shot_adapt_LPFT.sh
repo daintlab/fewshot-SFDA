@@ -1,6 +1,6 @@
 for lr in 1e-5
 do
-    for shot in 3
+    for shot in 1 3 5
     do
         for seed in 0 1 2
         do
