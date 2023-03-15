@@ -77,7 +77,7 @@ CUDA_VISIBLE_DEVICES=0 python target_finetune.py --dataset office31 \
 <hr>
 
 ### Learning rates used in FT
-We provide the learning rates we used for FT on all benchmark datasets for reproducibility. All the learning rates are selected through 1-shot validation.
+We provide the learning rates we used for FT and LP-FT on all benchmark datasets. All the learning rates are selected through 1-shot validation.
 
 |Method|Office31|OfficeHome|VisDA-C|VLCS|TerraIncognita|
 |:----:|:------:|:--------:|:-----:|:--:|:------------:|
