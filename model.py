@@ -6,82 +6,12 @@ from collections import OrderedDict
 import torch.nn.utils.weight_norm as weightNorm
 from torchvision import models
 
-BLOCKNAMES = {
-        "stem": ["conv1", "bn1", "relu", "maxpool"],
-        "block1": ["layer1"],
-        "block2": ["layer2"],
-        "block3": ["layer3"],
-        "block4": ["layer4"],
-    }
-
-class ERM(nn.Module):
-    def __init__(self,num_classes,arch='resnet50'):
-        super(ERM,self).__init__()
-        if arch == 'resnet50':
-            self.network = torchvision.models.resnet50(pretrained=True)
-        else:
-            raise ValueError("Not implemented")
-        n_features = self.network.fc.in_features
-        
-        del self.network.fc
-        self.network.fc = nn.Identity()
-        
-        self.classifier = nn.Linear(n_features,num_classes)
-
-    def forward(self,x):
-        logit = self.classifier(self.network(x))
-        return logit
-    
-
-class ERMWithFeature(nn.Module):
-    def __init__(self,num_classes,feature_block=None,arch='resnet50'):
-        super(ERMWithFeature,self).__init__()
-        if arch == 'resnet50':
-            self.network = torchvision.models.resnet50(pretrained=True)
-        else:
-            raise ValueError("Not implemented")
-        n_features = self.network.fc.in_features
-        
-        del self.network.fc
-        self.network.fc = nn.Identity()
-        
-        self.classifier = nn.Linear(n_features,num_classes)
-
-        self.feature = []
-        self.feature_layers = self.feature_hook(feature_block,BLOCKNAMES)
-        
-    def hook(self,module,input,output):
-        self.feature.append(torch.mean(output,dim=[2,3]))
-    
-    def feature_hook(self,feature_block,block_names):
-        if feature_block is None:
-            feature_block = list(block_names.keys())
-        else:
-            feature_block = feature_block.split(',')
-        feat_layers = []
-        for block in feature_block:
-            module_list = block_names.get(block,-1)
-            if module_list == -1:
-                raise ValueError("no such block name")
-            feat_layers.append(module_list[-1])
-        
-        for n,m in self.network.named_modules():
-            if n in feat_layers:
-                m.register_forward_hook(self.hook)
-        
-        return feat_layers
-                
-    def forward(self,x,ret_feats=False):
-        self.feature.clear()
-        logit = self.classifier(self.network(x))
-        if ret_feats:
-            return logit,self.feature
-        else:
-            return logit
 
 class SHOT(nn.Module):
     def __init__(self,ckpts,dataset='office_home',subset=False):
         super(SHOT,self).__init__()
+        if 'RSUT' in dataset:
+            dataset = dataset.replace('_RSUT','')
         if subset:
             config = {
                 'office_home' : {
@@ -105,11 +35,6 @@ class SHOT(nn.Module):
                 'office_home' : {
                     'arch' : 'resnet50',
                     'class_num' : 65,
-                    'bottleneck_dim' : 256
-                },
-                'PACS' : {
-                    'arch' : 'resnet50',
-                    'class_num' : 7,
                     'bottleneck_dim' : 256
                 },
                 'VLCS' : {
@@ -147,8 +72,7 @@ class SHOT(nn.Module):
         self.netF.load_state_dict(torch.load(ckpts['netF']))
         self.netB.load_state_dict(torch.load(ckpts['netB']))
         self.netC.load_state_dict(torch.load(ckpts['netC']))
-        # self.head = torch.nn.Linear(256, 4)
-    # def forward(self,x):
+
     def forward(self,x,flag=True):
         if flag:
             return self.netC(self.netB(self.netF(x)))
@@ -163,9 +87,12 @@ class SHOT(nn.Module):
         return self.netF(x)
     def get_output(self,x):
         return self.netC(self.netB(x))
+
 class SHOT_fe(nn.Module):
     def __init__(self,ckpts,dataset='office_home',subset=False):
         super(SHOT_fe,self).__init__()
+        if 'RSUT' in dataset:
+            dataset = dataset.replace('_RSUT','')
         if subset:
             config = {
                 'office_home' : {
@@ -259,54 +186,6 @@ class SHOT_fe(nn.Module):
             self.netB.load_state_dict(B)
             self.netC.load_state_dict(C)
         
-    def forward(self,x):
-        return self.netC(self.netB(self.netF(x)))
-
-class SHOT_ODA(nn.Module):
-    def __init__(self,ckpts,dataset='office_home'):
-        super(SHOT_ODA,self).__init__()
-        config = {
-            'office_home' : {
-                'arch' : 'resnet50',
-                'class_num' : 25,
-                'bottleneck_dim' : 256
-            },
-            'PACS' : {
-                'arch' : 'resnet50',
-                'class_num' : 7,
-                'bottleneck_dim' : 256
-            },
-            'VLCS' : {
-                'arch' : 'resnet50',
-                'class_num' : 5,
-                'bottleneck_dim' : 256
-            },
-            'office31' : {
-                'arch' : 'resnet50',
-                'class_num' : 31,
-                'bottleneck_dim' : 256
-            },
-            'VISDA-C' : {
-                'arch' : 'resnet101',
-                'class_num' : 12,
-                'bottleneck_dim' : 256
-            }
-        }
-        self.netF = ResBase(res_name=config[dataset]['arch'])
-        self.netB = feat_bottleneck(
-            type='bn',
-            feature_dim=self.netF.in_features,
-            bottleneck_dim=config[dataset]['bottleneck_dim']
-        )
-        self.netC = feat_classifier(
-            type='wn',
-            class_num=config[dataset]['class_num'],
-            bottleneck_dim=config[dataset]['bottleneck_dim']
-        )
-        self.netF.load_state_dict(torch.load(ckpts['netF']))
-        self.netB.load_state_dict(torch.load(ckpts['netB']))
-        self.netC.load_state_dict(torch.load(ckpts['netC']))
-    
     def forward(self,x):
         return self.netC(self.netB(self.netF(x)))
 

@@ -116,21 +116,17 @@ def get_bn_params(model,affine,layer=None):
     return bn_params
 
 def get_proper_param(model,args):
-    if args.pretrain == 'SHOT':
-        if args.adapt == 'cls':
-            param = model.netC.parameters()
-        elif args.adapt == 'BN':
-            param = get_bn_params(model,affine='BN')
-        elif args.adapt == 'clsBN':
-            param = get_bn_params(model,affine='BN')
-            param.extend(list(model.netC.parameters()))
-        elif args.adapt == 'feat':
-            param = list(model.netF.parameters())+list(model.netB.parameters())
-        elif args.adapt == 'all':
-            param = model.parameters()
-        else:
-            raise NotImplementedError
-        
+    if args.adapt == 'cls':
+        param = model.netC.parameters()
+    elif args.adapt == 'BN':
+        param = get_bn_params(model,affine='BN')
+    elif args.adapt == 'clsBN':
+        param = get_bn_params(model,affine='BN')
+        param.extend(list(model.netC.parameters()))
+    elif args.adapt == 'feat':
+        param = list(model.netF.parameters())+list(model.netB.parameters())
+    elif args.adapt == 'all':
+        param = model.parameters()
     else:
         raise NotImplementedError
     
@@ -138,39 +134,19 @@ def get_proper_param(model,args):
     
 def freeze_proper_param(model,args):
     model.eval()
-    if args.pretrain == 'SHOT':
-        if args.adapt == 'cls':
-            model.netC.train()
-        elif args.adapt == 'BN':
-            freeze_except_bn(model)
-        elif args.adapt == 'clsBN':
-            freeze_except_bn(model)
-            model.netC.train()
-        elif args.adapt == 'feat':
-            model.netF.train()
-            model.netB.train()
-        elif args.adapt == 'all':
-            model.train()
-        else:
-            raise NotImplementedError
+    
+    if args.adapt == 'cls':
+        model.netC.train()
+    elif args.adapt == 'BN':
+        freeze_except_bn(model)
+    elif args.adapt == 'clsBN':
+        freeze_except_bn(model)
+        model.netC.train()
+    elif args.adapt == 'feat':
+        model.netF.train()
+        model.netB.train()
+    elif args.adapt == 'all':
+        model.train()
     else:
         raise NotImplementedError
-    
-    
-def mixup_data(x, y, alpha=1.0):
-    '''Returns mixed inputs, pairs of targets, and lambda'''
-    if alpha > 0:
-        lam = np.random.beta(alpha, alpha)
-    else:
-        lam = 1
 
-    batch_size = x.size()[0]
-    
-    index = torch.randperm(batch_size).cuda()
-
-    mixed_x = lam * x + (1 - lam) * x[index, :]
-    y_a, y_b = y, y[index]
-    return mixed_x, y_a, y_b, lam
-    
-def mixup_criterion(criterion, pred, y_a, y_b, lam):
-    return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)

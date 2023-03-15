@@ -7,24 +7,6 @@ from PIL import ImageFile, Image
 import numpy as np
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-class SourceDomainImageFolder:
-    '''
-    Modified https://github.com/facebookresearch/DomainBed/blob/main/domainbed/datasets.py
-    src requires list of source domains in str type
-    '''
-    def __init__(self,root,src):
-        super().__init__()
-        assert type(src) == list
-        self.environments = src        
-        self.datasets = []
-        for environment in self.environments:
-            path = os.path.join(root, environment)
-            env_dataset = ImageFolder(path)
-
-            self.datasets.append(env_dataset)
-        
-        self.num_classes = len(self.datasets[-1].classes)
-
 class _SplitDataset(torch.utils.data.Dataset):
     """Used by split_dataset"""
     def __init__(self, underlying_dataset, keys):
@@ -149,64 +131,27 @@ def few_shot_subset(targets,n_shot):
         idx = torch.where(targets==class_[i])[0]
         if count < n_shot+1:
             raise ValueError(f"Class {class_[i]} only have {count} samples, {n_shot}-Shot is not available")
-            # TODO : n_shot보다 적은 데이터수를 가진 클래스 어떻게 처리할지
-            # idx = idx[torch.randperm(len(idx))[:count+1]]
         else:
             temp = torch.randperm(len(idx))
-            # idx = idx[torch.randperm(len(idx))[:n_shot+1]]
-            # trn_idx, val_idx = idx[:-1], idx[-1]
             trn_idx, val_idx = idx[temp[:n_shot]], idx[temp[-1]]
         indices.extend(trn_idx.tolist())
         val_indices.append(val_idx)
 
     return indices, val_indices
-
-def get_dataset(args):
-    '''
-    Returns source train/test datasets
-    '''   
-    data_path = os.path.join(args.data_dir,args.dataset)
-    domains = sorted([f.name for f in os.scandir(data_path) if f.is_dir()])
-
-    tgt_domain = domains[args.target]
-    src_domains = [d for d in domains if d != tgt_domain] if args.source is None else [domains[args.source]]
-    
-    src_datasets = SourceDomainImageFolder(data_path,src_domains)
-    num_classes = src_datasets.num_classes
-
-    src_trn_datasets = []
-    src_tst_datasets = []
-    for dataset in src_datasets.datasets:
-        big_split,small_split = split_dataset(dataset,ratio=args.ratio,seed=args.seed)
-        big_split.transform = get_transform(mode='train',type_='default')
-        small_split.transform = get_transform(mode='test')
-        src_trn_datasets.append(big_split)
-        src_tst_datasets.append(small_split)
-        
-    return src_trn_datasets,src_tst_datasets,src_domains,num_classes
-
     
 def get_target_dataset(args):
-    if args.dataset == 'Imagenet-C':
-        data_path = args.data_dir+'/'+args.dataset
-        domains = []
-        for f in os.scandir(data_path):
-            if f.is_dir() and f.name != 'extra':
-                for d in os.scandir(data_path+'/'+f.name):
-                    if d.is_dir():
-                        domains.append(f.name+'/'+d.name)
-        domains.sort()
+    data_path = os.path.join(args.data_dir,args.dataset)
+    if args.subset:
+        domains = sorted([f.name.split('_')[0] for f in os.scandir(data_path)])
+    elif args.imbalance:
+        domains = sorted(set([f.name.split('_')[0] for f in os.scandir(data_path)]))
     else:
-        data_path = os.path.join(args.data_dir,args.dataset)
         domains = sorted([f.name for f in os.scandir(data_path) if f.is_dir()])
 
     tgt_domain = domains[args.target]
-    print(tgt_domain)
+    print(f"Target Domain : {tgt_domain}")
      
-    if args.dataset == 'Imagenet-C':
-        path = data_path + f'/{tgt_domain}/{args.severity}'
-    else:
-        path = data_path + f'/{tgt_domain}'
+    path = data_path + f'/{tgt_domain}'
 
     if args.subset:
         if args.dataset == 'office_home':
@@ -218,7 +163,7 @@ def get_target_dataset(args):
         if args.dataset == 'VISDA-C':
             args.class_num = 6
             known_class = np.random.RandomState(seed=args.oda_seed).permutation(12)[:args.class_num]
-        txt_tar = open(f'/nas/home/tmddnjs3467/domain-generalization/SHOT/object/data/{args.dataset}/{tgt_domain}_list.txt').readlines()
+        txt_tar = open(f'{args.data_dir}/{args.dataset}/{tgt_domain}_list.txt').readlines()
         label_dict = {known_class[i]:i for i in range(len(known_class))}
         known_tar = []
         t_classes = []
@@ -232,7 +177,7 @@ def get_target_dataset(args):
         txt_known = known_tar.copy()
         target_dataset = ImageList_idx(txt_known)
     elif args.imbalance:
-        txt_tar = open(f'/nas/home/tmddnjs3467/domain-generalization/SHOT/object/data/{args.dataset}/{tgt_domain}_UT.txt').readlines()
+        txt_tar = open(f'{args.data_dir}/{args.dataset}/{tgt_domain}_UT.txt').readlines()
         target_dataset = ImageList_idx(txt_tar)
     else:
         target_dataset = ImageFolder(os.path.join(path))
@@ -252,10 +197,7 @@ def get_target_dataset(args):
         assert len(keys) == len(targets)
         few_shot_idx, val_idx = few_shot_subset(targets,args.few_shot) 
 
-        if args.robust:
-            val_dataset = ImageFolder(os.path.join(f'./valset_cor_{args.dataset}/{args.seed}/{tgt_domain}'), transform=get_transform(mode='test'))
-        else:
-            val_dataset = torch.utils.data.Subset(train_dataset,val_idx)
+        val_dataset = torch.utils.data.Subset(train_dataset,val_idx)
         adapt_dataset = torch.utils.data.Subset(train_dataset,few_shot_idx)
         
         # inspect few shot

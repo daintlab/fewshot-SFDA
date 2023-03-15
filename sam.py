@@ -1,5 +1,7 @@
 import torch
-
+'''
+Refer : https://github.com/davda54/sam
+'''
 
 class SAM(torch.optim.Optimizer):
     def __init__(self, params, base_optimizer, rho=0.05, adaptive=False, **kwargs):
