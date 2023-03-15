@@ -34,6 +34,7 @@ We follow the same training procedure from SHOT to generate source pretrained mo
 #### 3-shot fine-tuning(FT) on Office31 dataset
 ```
 # Adapt source domain 0 (Amazon) to all possible target domains (DSLR, Webcam)
+
 CUDA_VISIBLE_DEVICES=0 python target_finetune.py --dataset office31 \
 --pretrain SHOT --adapt all --few_shot 3 --work_dir <work_dir> \
 --lr 1e-05 --SAM --seed 0 --source 0 --ckpt_dir <Path to source model directory>
@@ -43,6 +44,7 @@ CUDA_VISIBLE_DEVICES=0 python target_finetune.py --dataset office31 \
 - First, train linear classifier only(LP) by changing `--adapt all` to `--adapt cls`.
 ```
 # Adapt source domain 0 (Amazon) to all possible target domains (DSLR, Webcam)
+
 CUDA_VISIBLE_DEVICES=0 python target_finetune.py --dataset office31 \
 --pretrain SHOT --adapt cls --few_shot 3 --work_dir <work_dir> \
 --lr 1e-04 --SAM --seed 0 --source 0 --ckpt_dir <Path to source model directory>
@@ -50,6 +52,7 @@ CUDA_VISIBLE_DEVICES=0 python target_finetune.py --dataset office31 \
 - Next, train whole network(FT) starting from LP checkpoint by changing `--pretrain SHOT` to `--pretrain SHOT_LP` and passing the path to LP checkpoint(work_dir in the above command) to `ckpt_dir`
 ```
 # Adapt source domain 0 (Amazon) to all possible target domains (DSLR, Webcam)
+
 CUDA_VISIBLE_DEVICES=0 python target_finetune.py --dataset office31 \
 --pretrain SHOT_LP --adapt all --few_shot 3 --work_dir <work_dir> \
 --lr 1e-05 --SAM --seed 0 --source 0 --ckpt_dir <Path to LP trained directory>
