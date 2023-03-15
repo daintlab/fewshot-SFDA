@@ -77,13 +77,8 @@ CUDA_VISIBLE_DEVICES=0 python target_finetune.py --dataset office31 \
 ```
 - Note that all the reported values are from validation best model.
 
-<hr>
+<hr> 
 
-### Learning rates used in FT
-We provide the learning rates we used for FT and LP-FT on all benchmark datasets. All the learning rates are selected through 1-shot validation.
+### Learning rates used in FT and LP-FT
+For both FT and the second stage of LP-FT, we used `1e-05` for all benchmark datasets. For the first stage of LP-FT, we used `1e-04` for all benchmark datsets. All the learning rates are selected through 1-shot validation.
 
-|Method|Office31|OfficeHome|VisDA-C|VLCS|TerraIncognita|
-|:----:|:------:|:--------:|:-----:|:--:|:------------:|
-|FT|1e-05|1e-05|1e-05|1e-05|1e-06|
-|LP-FT(LP stage)|1e-04|1e-04|1e-04|1e-04|1e-05|
-|LP-FT(FT stage)|1e-05|1e-05|1e-05|1e-05|1e-06|
