@@ -141,28 +141,33 @@ def few_shot_subset(targets,n_shot):
     
 def get_target_dataset(args):
     data_path = os.path.join(args.data_dir,args.dataset)
-    if args.subset:
-        domains = sorted([f.name.split('_')[0] for f in os.scandir(data_path)])
+    if args.subset: # Read from txt file directory
+        # domains = sorted([f.name.split('_')[0] for f in os.scandir(data_path)])
+        domains = sorted([f.name.split('_list.txt')[0] for f in os.scandir(data_path)])
     elif args.imbalance:
         domains = sorted(set([f.name.split('_')[0] for f in os.scandir(data_path)]))
     else:
         domains = sorted([f.name for f in os.scandir(data_path) if f.is_dir()])
-
+    
     tgt_domain = domains[args.target]
     print(f"Target Domain : {tgt_domain}")
      
     path = data_path + f'/{tgt_domain}'
 
-    if args.subset:
+    if args.subset: # OoD experiment
         if args.dataset == 'office_home':
             args.class_num = 25
             known_class = np.random.RandomState(seed=args.oda_seed).permutation(65)[:args.class_num]
-        if args.dataset == 'office31':
+        elif args.dataset == 'office31':
             args.class_num = 10
             known_class = np.random.RandomState(seed=args.oda_seed).permutation(31)[:args.class_num]
-        if args.dataset == 'VISDA-C':
+        elif args.dataset == 'VISDA-C':
             args.class_num = 6
             known_class = np.random.RandomState(seed=args.oda_seed).permutation(12)[:args.class_num]
+        elif args.dataset == 'mini_domain_net':
+            args.class_num = 15 # number of known class
+            known_class = np.random.RandomState(seed=args.oda_seed).permutation(40)[:args.class_num]
+        print(f"{len(known_class)} known classes : {known_class}")
         txt_tar = open(f'{args.data_dir}/{args.dataset}/{tgt_domain}_list.txt').readlines()
         label_dict = {known_class[i]:i for i in range(len(known_class))}
         known_tar = []
@@ -211,4 +216,6 @@ def get_target_dataset(args):
             assert torch.allclose(counts.float(),torch.ones(max(targets)+1)*args.few_shot)
     else:
         adapt_dataset = train_dataset
+        val_dataset = test_dataset
+        
     return adapt_dataset,val_dataset,test_dataset,tgt_domain
