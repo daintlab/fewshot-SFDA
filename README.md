@@ -36,16 +36,16 @@ We follow the same training procedure from SHOT to generate source pretrained mo
 # Adapt source domain 0 (Amazon) to all possible target domains (DSLR, Webcam)
 
 CUDA_VISIBLE_DEVICES=0 python target_finetune.py --dataset office31 \
---pretrain SHOT --adapt all --few_shot 3 --work_dir <work_dir> \
+--pretrain SHOT --adapt all --few_shot 3 --work_dir <work_dir> --val_frep 10 \
 --lr 1e-05 --seed 0 --source 0 --ckpt_dir <Path to source model directory>
 ```
 
 #### 3-shot LP-FT on Office31 dataset
-- First, train linear classifier only(LP) by changing `--adapt all` to `--adapt cls`.
+- First, train linear classifier only(LP) by changing `--adapt all` to `--adapt cls` and adding `--adapt_step 400`.
 ```
 # Adapt source domain 0 (Amazon) to all possible target domains (DSLR, Webcam)
 
-CUDA_VISIBLE_DEVICES=0 python target_finetune.py --dataset office31 \
+CUDA_VISIBLE_DEVICES=0 python target_finetune.py --dataset office31 --adapt_step 400 \
 --pretrain SHOT --adapt cls --few_shot 3 --work_dir <work_dir> \
 --lr 1e-04 --seed 0 --source 0 --ckpt_dir <Path to source model directory>
 ```
@@ -54,7 +54,7 @@ CUDA_VISIBLE_DEVICES=0 python target_finetune.py --dataset office31 \
 # Adapt source domain 0 (Amazon) to all possible target domains (DSLR, Webcam)
 
 CUDA_VISIBLE_DEVICES=0 python target_finetune.py --dataset office31 \
---pretrain SHOT_LP --adapt all --few_shot 3 --work_dir <work_dir> \
+--pretrain SHOT_LP --adapt all --few_shot 3 --work_dir <work_dir> --val_frep 10 \
 --lr 1e-05 --seed 0 --source 0 --ckpt_dir <Path to LP trained directory>
 ```
 
